@@ -8,24 +8,20 @@ Load the data
 nba <- read.csv("nba_final.csv")
 ```
 
-Select only the columns we need
-```{r}
-nba <- nba[, c("PTS", "AST", "BLK", "MP", "Play", "mean_views")]
-```
-
-Clean the row with NA in one of the columns
-```{r}
-nba <- na.omit(nba)
-```
-
 Look at the data
 ```{r}
 head(nba)
 ```
 
-Fit a preliminary model with 5 predictors: `PTS`, `AST`, `BLK`, `MP`, AND `Play` and response variable `mean_views`
+Select only the columns we need and clean the row with at least one NA
 ```{r}
-prelim_model <- lm(mean_views ~ PTS + AST + BLK + MP + Play, nba)
+nba <- nba[, c("PTS", "AST", "TRB", "MP", "Play", "mean_views")]
+nba <- na.omit(nba)
+```
+
+Fit a preliminary model with 5 predictors: `PTS`, `AST`, `TRB`, `MP`, AND `Play` and response variable `mean_views`
+```{r}
+prelim_model <- lm(mean_views ~ PTS + AST + TRB + MP + Play, nba)
 summary(prelim_model)
 ```
 
@@ -36,19 +32,19 @@ x_value <- fitted(prelim_model)
 plot(x_value, y_value, xlab = "Fitted values", ylab = "Residuals", main = "Residuals vs Fitted values")
 ```
 
-Residuals vs each predictor (quantitative) plot
+Residuals vs predictor (quantitative) plot
 ```{r}
 par(mfrow = c(2, 2))
 
-plot(nba$PTS, y_value, xlab = "Points per game", ylab = "Residuals", main = "Residuals vs Points per game")
-plot(nba$AST, y_value, xlab = "Assists per game", ylab = "Residuals", main = "Residuals vs Assists per game")
-plot(nba$BLK, y_value, xlab = "Blocks per game", ylab = "Residuals", main = "Residuals vs Blocks per game")
-plot(nba$MP, y_value, xlab = "Minutes played", ylab = "Residuals", main = "Residuals vs Minutes played")
+plot(nba$PTS, y_value, xlab = "Points per game", ylab = "Residuals", main = "Residuals vs PTS (Points per game)")
+plot(nba$AST, y_value, xlab = "Assists per game", ylab = "Residuals", main = "Residuals vs AST (Assists per game)")
+plot(nba$TRB, y_value, xlab = "Blocks per game", ylab = "Residuals", main = "Residuals vs TRB (Total rebounds per game)")
+plot(nba$MP, y_value, xlab = "Minutes played", ylab = "Residuals", main = "Residuals vs MP (Minutes played)")
 ```
 
 Residuals vs each predictor (categorical) plot
 ```{r}
-boxplot(y_value ~ nba$Play, xlab = "All-star participation", ylab = "Residuals", main = "Residuals vs All-star participation")
+boxplot(y_value ~ nba$Play, xlab = "All-star participation", ylab = "Residuals", main = "Residuals vs Play (All-star participation)")
 ```
 
 Normal QQ plot
