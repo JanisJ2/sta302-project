@@ -19,10 +19,26 @@ nba <- nba[, c("PTS", "AST", "TRB", "MP", "Play", "mean_views")]
 nba <- na.omit(nba)
 ```
 
+Look at the data again
+```{r}
+head(nba)
+```
+
 Fit a preliminary model with 5 predictors: `PTS`, `AST`, `TRB`, `MP`, AND `Play` and response variable `mean_views`
 ```{r}
 prelim_model <- lm(mean_views ~ PTS + AST + TRB + MP + Play, nba)
 summary(prelim_model)
+```
+
+Verify two conditions of using residual plots in multiple linear regression
+1. Conditional mean response condition
+```{r}
+plot(fitted(prelim_model), nba$mean_views, xlab = "Fitted", ylab = "Actual mean_views", main = "Actual mean_views vs Fitted")
+```
+
+2. Conditional mean predictor condition
+```{r}
+pairs(nba[, c("PTS", "AST", "TRB", "MP")])
 ```
 
 Residuals vs fitted values plot
