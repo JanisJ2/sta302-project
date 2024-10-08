@@ -15,13 +15,62 @@ head(nba)
 
 Select only the columns we need and clean the row with at least one NA
 ```{r}
-nba <- nba[, c("PTS", "AST", "TRB", "MP", "Play", "mean_views")]
+nba <- nba[, c("PTS", "AST", "BLK", "TRB", "eFG.", "STL", "MP", "Pos1", "Play", "mean_views")]
 nba <- na.omit(nba)
 ```
 
 Look at the data again
 ```{r}
 head(nba)
+```
+Summary of the data numerically
+```{r}
+summary(nba)
+```
+
+Summary of the response variable (mean_views)
+```{r}
+par(mfrow = c(1, 2))
+hist(nba$mean_views, main = "Histogram of Mean Views", xlab = "Mean Views", col = "lightpink", breaks = 20)
+boxplot(nba$mean_views, main = "Boxplot of Mean Views", col = "lightpink")
+```
+
+```{r}
+# Histograms for continuous variables
+par(mfrow = c(3, 3))
+
+hist(nba$PTS, main = "Histogram of PTS", xlab = "Points", col = "lightblue", breaks = 20)
+hist(nba$AST, main = "Histogram of AST", xlab = "Assists", col = "lightgreen", breaks = 20)
+hist(nba$BLK, main = "Histogram of BLK", xlab = "Blocks", col = "lightcoral", breaks = 20)
+hist(nba$TRB, main = "Histogram of TRB", xlab = "Rebounds", col = "lightyellow", breaks = 20)
+hist(nba$eFG., main = "Histogram of eFG.", xlab = "Effective Field Goal %", col = "lightgray", breaks = 20)
+hist(nba$STL, main = "Histogram of STL", xlab = "Steals", col = "lightcyan", breaks = 20)
+hist(nba$MP, main = "Histogram of MP", xlab = "Minutes Played", col = "lavender", breaks = 20)
+```
+
+```{r}
+# Boxplots for continuous variables
+par(mfrow = c(1, 4))
+
+boxplot(nba$PTS, main = "Boxplot of PTS", col = "lightblue")
+boxplot(nba$AST, main = "Boxplot of AST", col = "lightgreen")
+boxplot(nba$BLK, main = "Boxplot of BLK", col = "lightcoral")
+boxplot(nba$TRB, main = "Boxplot of TRB", col = "lightyellow")
+```
+
+```{r}
+par(mfrow = c(1, 3))
+boxplot(nba$eFG., main = "Boxplot of eFG.", col = "lightgray")
+boxplot(nba$STL, main = "Boxplot of STL", col = "lightcyan")
+boxplot(nba$MP, main = "Boxplot of MP", col = "lavender")
+```
+
+Bar chart for categorical variables
+```{r}
+par(mfrow = c(1, 2))  # Arrange plots in a 1x2 grid
+
+barplot(table(nba$Pos1), main = "Barplot of Positions", col = "lightblue", xlab = "Position", ylab = "Frequency")
+barplot(table(nba$Play), main = "Barplot of Play", col = "lightgreen", xlab = "Play", ylab = "Frequency")
 ```
 
 Fit a preliminary model with 5 predictors: `PTS`, `AST`, `TRB`, `MP`, AND `Play` and response variable `mean_views`
