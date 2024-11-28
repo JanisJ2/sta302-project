@@ -1,119 +1,588 @@
 ---
 title: "R Notebook"
-output: html_notebook
+output: pdf_document
+geometry: margin=0.5in
+urlcolor: blue
 ---
 
+Set seed to ensure reproducibility
+```{r}
+set.seed(12)
+```
+
+## 1. Data Exploration and Preparation
+### a) Load data, choose relevant column, and drop rows with NA values
 Load the data
 ```{r}
 nba <- read.csv("nba_final.csv")
 ```
-
-Look at the data
+Take a peek at the data
 ```{r}
 head(nba)
 ```
-
-Select only the columns we need and clean the row with at least one NA
+Select only the columns we're interested in
 ```{r}
-nba <- nba[, c("PTS", "AST", "BLK", "TRB", "eFG.", "STL", "MP", "Pos1", "Play", "mean_views")]
+nba <- nba[, c("PTS", "AST", "BLK", "TRB", "eFG.", "MP", "STL", "Pos1", "Play", "Salary")]
+```
+Check initial number of rows
+```{r}
+nrow(nba)
+```
+See which column has missing data
+```{r}
+missing_summary <- colSums(is.na(nba))
+print(missing_summary)
+```
+Clean missing data and check the number of rows again
+```{r}
 nba <- na.omit(nba)
+print(nrow(nba))
+```
+66 observations (from 1408) with missing values were dropped, leaving 1342 data
+
+### b) Split the dataset into training and test dataset (each 50%)
+```{r}
+s <- sample(1:nrow(nba), nrow(nba)/2, replace=F)
+train <- nba[s,]
+test <- nba[-s,]
 ```
 
-Look at the data again
+### c) Data visualization: see distribution of response variable and all predictor variables, as well as outliers
+#### i. Histogram for response variable and numeric predictors
 ```{r}
-head(nba)
+numeric_vars <- c("PTS", "AST", "BLK", "TRB", "eFG.", "MP", "STL", "Salary")
+par(mfrow = c(3, 3))
+for (var in numeric_vars) {
+  hist(train[[var]], main = paste("Histogram of", var), xlab = var)
+}
 ```
-Summary of the data numerically
+#### ii. Boxplot for response variable and numeric predictors
 ```{r}
-summary(nba)
+par(mfrow = c(3, 3))
+for (var in numeric_vars) {
+  boxplot(train[[var]], main = paste("Boxplot of", var), horizontal = TRUE)
+}
 ```
-
-Summary of the response variable (mean_views)
+#### iii. Barplot for categorical predictors
 ```{r}
 par(mfrow = c(1, 2))
-hist(nba$mean_views, main = "Histogram of Mean Views", xlab = "Mean Views", col = "lightpink", breaks = 20)
-boxplot(nba$mean_views, main = "Boxplot of Mean Views", col = "lightpink")
+for (var in c("Pos1", "Play")) {
+  barplot(table(train[[var]]), main = paste("Barplot of", var))
+}
+```
+### d) Check outliers for all variables (more extreme than 1.5 x IQR)
+```{r}
+find_outliers <- function(x) {
+  q1 <- quantile(x, 0.25)
+  q3 <- quantile(x, 0.75)
+  iqr <- q3 - q1
+  lower_bound <- q1 - 1.5 * iqr
+  upper_bound <- q3 + 1.5 * iqr
+  outliers <- x[x < lower_bound | x > upper_bound]
+  return(paste(length(outliers), "outliers"))
+}
+
+sapply(numeric_vars, function(var) find_outliers(train[[var]]))
 ```
 
+## 2. Preliminary Modeling
+### a) Fit SLR for each predictor variable, assess statistical significance (T-test) and R^2
 ```{r}
-# Histograms for continuous variables
-par(mfrow = c(3, 3))
+# Create a function to extract key statistics from model summaries
+get_model_stats <- function(model, predictor) {
+  summary_stats <- summary(model)
+  
+  # Extract relevant statistics
+  r_squared <- round(summary_stats$r.squared, 3)
+  adj_r_squared <- round(summary_stats$adj.r.squared, 3)
+  f_stat <- round(summary_stats$fstatistic[1], 2)
+  p_value <- format.pval(pf(summary_stats$fstatistic[1], 
+                           summary_stats$fstatistic[2], 
+                           summary_stats$fstatistic[3], 
+                           lower.tail = FALSE), digits = 3)
+  
+  # Return as named vector
+  return(c(Predictor = predictor,
+           R_squared = r_squared,
+           Adj_R_squared = adj_r_squared,
+           F_statistic = f_stat,
+           P_value = p_value))
+}
 
-hist(nba$PTS, main = "Histogram of PTS", xlab = "Points", col = "lightblue", breaks = 20)
-hist(nba$AST, main = "Histogram of AST", xlab = "Assists", col = "lightgreen", breaks = 20)
-hist(nba$BLK, main = "Histogram of BLK", xlab = "Blocks", col = "lightcoral", breaks = 20)
-hist(nba$TRB, main = "Histogram of TRB", xlab = "Rebounds", col = "lightyellow", breaks = 20)
-hist(nba$eFG., main = "Histogram of eFG.", xlab = "Effective Field Goal %", col = "lightgray", breaks = 20)
-hist(nba$STL, main = "Histogram of STL", xlab = "Steals", col = "lightcyan", breaks = 20)
-hist(nba$MP, main = "Histogram of MP", xlab = "Minutes Played", col = "lavender", breaks = 20)
+# Fit all models and collect statistics
+modelPts <- lm(Salary ~ PTS, data=train)
+modelAst <- lm(Salary ~ AST, data=train)
+modelBlk <- lm(Salary ~ BLK, data=train)
+modelTrb <- lm(Salary ~ TRB, data=train)
+modelefg <- lm(Salary ~ eFG., data=train)
+modelStl <- lm(Salary ~ STL, data=train)
+modelPos1 <- lm(Salary ~ Pos1, data=train)
+modelPlay <- lm(Salary ~ Play, data=train)
+
+models_list <- list(modelPts, modelAst, modelBlk, modelTrb, modelefg, modelStl, modelPos1, modelPlay)
+
+predictors <- c("PTS", "AST", "BLK", "TRB", "eFG.", "STL", "Pos1", "Play")
+
+# Create table
+results_matrix <- t(sapply(seq_along(models_list), function(i) {
+  get_model_stats(models_list[[i]], predictors[i])
+}))
+
+# Convert to data frame and display
+results_df <- as.data.frame(results_matrix)
+results_df
+
+if (requireNamespace("kableExtra", quietly = TRUE)) {
+  library(kableExtra)
+  kable(results_df, format = "latex") %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                  full_width = FALSE)
+}
 ```
 
+### b) Fit MLR for all predictor variables to assess ANOVA and T-test
 ```{r}
-# Boxplots for continuous variables
-par(mfrow = c(1, 4))
-
-boxplot(nba$PTS, main = "Boxplot of PTS", col = "lightblue")
-boxplot(nba$AST, main = "Boxplot of AST", col = "lightgreen")
-boxplot(nba$BLK, main = "Boxplot of BLK", col = "lightcoral")
-boxplot(nba$TRB, main = "Boxplot of TRB", col = "lightyellow")
+full_model <- lm(Salary ~ PTS + AST + BLK + TRB + eFG. + MP + STL + Pos1 +  Play, data=train)
+summary(full_model)
+```
+Examine VIF for multicollinearity
+```{r}
+library(car)
+vif(full_model)
 ```
 
+## 3. Model Refinement
+### a) Check assumptions for using residual plots in MLR
+#### i. Scatterplot of Response vs Fitted values
 ```{r}
-par(mfrow = c(1, 3))
-boxplot(nba$eFG., main = "Boxplot of eFG.", col = "lightgray")
-boxplot(nba$STL, main = "Boxplot of STL", col = "lightcyan")
-boxplot(nba$MP, main = "Boxplot of MP", col = "lavender")
+y_hat <- fitted(full_model)
+
+plot(y_hat, full_model$Salary,
+ 	xlab = "Fitted",
+ 	ylab = "Salary",
+ 	main = "Salary vs Fitted")
 ```
-
-Bar chart for categorical variables
+#### ii. Pairwise scatterplots of predictors
 ```{r}
-par(mfrow = c(1, 2))  # Arrange plots in a 1x2 grid
+install.packages("GGally")
+library(GGally)
 
-barplot(table(nba$Pos1), main = "Barplot of Positions", col = "lightblue", xlab = "Position", ylab = "Frequency")
-barplot(table(nba$Play), main = "Barplot of Play", col = "lightgreen", xlab = "Play", ylab = "Frequency")
+ggpairs(train[, c("PTS", "AST", "BLK", "TRB", "eFG.", "MP", "STL")],
+    	title = "Pairwise Scatterplots",
+    	upper = list(continuous = wrap("cor", size = 4)),
+    	lower = list(continuous = wrap("points", alpha = 0.6, size = 1.5)),
+    	progress = FALSE)
 ```
-
-Fit a preliminary model with 5 predictors: `PTS`, `AST`, `TRB`, `MP`, AND `Play` and response variable `mean_views`
+### b) Check all assumptions (linearity, uncorrelated errors, constant variance, normality)
+#### i. Residuals vs fitted values
 ```{r}
-prelim_model <- lm(mean_views ~ PTS + AST + TRB + MP + Play, nba)
-summary(prelim_model)
-```
-
-Verify two conditions of using residual plots in multiple linear regression
-1. Conditional mean response condition
-```{r}
-plot(fitted(prelim_model), nba$mean_views, xlab = "Fitted", ylab = "Actual mean_views", main = "Actual mean_views vs Fitted")
-```
-
-2. Conditional mean predictor condition
-```{r}
-pairs(nba[, c("PTS", "AST", "TRB", "MP")])
-```
-
-Residuals vs fitted values plot
-```{r}
-y_value <- resid(prelim_model)
-x_value <- fitted(prelim_model)
+y_value <- resid(full_model)
+x_value <- fitted(full_model)
 plot(x_value, y_value, xlab = "Fitted values", ylab = "Residuals", main = "Residuals vs Fitted values")
 ```
-
-Residuals vs predictor (quantitative) plot
+#### ii. Residuals vs each numerical predictors
 ```{r}
-par(mfrow = c(2, 2))
-
-plot(nba$PTS, y_value, xlab = "Points per game", ylab = "Residuals", main = "Residuals vs PTS (Points per game)")
-plot(nba$AST, y_value, xlab = "Assists per game", ylab = "Residuals", main = "Residuals vs AST (Assists per game)")
-plot(nba$TRB, y_value, xlab = "Blocks per game", ylab = "Residuals", main = "Residuals vs TRB (Total rebounds per game)")
-plot(nba$MP, y_value, xlab = "Minutes played", ylab = "Residuals", main = "Residuals vs MP (Minutes played)")
+for (var in numeric_vars) {
+  plot(train[[var]], y_value, 
+       xlab = paste(var, "per game"), 
+       ylab = "Residuals", 
+       main = paste("Residuals vs", var)
+  )
+}
 ```
-
-Residuals vs each predictor (categorical) plot
+#### iii. Residuals vs each categorical predictors
 ```{r}
-boxplot(y_value ~ nba$Play, xlab = "All-star participation", ylab = "Residuals", main = "Residuals vs Play (All-star participation)")
-```
+boxplot(y_value ~ train$Play, xlab = "All-star participation", ylab = "Residuals", main = "Residuals vs All-star participation")
 
-Normal QQ plot
+boxplot(y_value ~ train$Pos1, xlab = "Main playing position", ylab = "Residuals", main = "Residuals vs Main Playing Position")
+```
+#### iv. QQ plot
 ```{r}
 qqnorm(y_value)
 qqline(y_value)
 ```
+
+### c) Apply box cox to any predictor or response variables if necessary
+```{r}
+# Shift everything by 0.5 since we have some zero values (box-cox doesn't allow)
+train_shifted <- train
+for (var in numeric_vars) {
+  min_value <- min(train[[var]], na.rm = TRUE)
+  if (min_value <= 0) {
+    train_shifted[[var]] <- train[[var]] - min_value + 1
+  }
+}
+```
+Use powerTransform to find lambda values
+```{r}
+p <- powerTransform(train_shifted[, numeric_vars])
+summary(p)
+```
+Apply box-cox transformation using the lambda values
+```{r}
+train_transformed <- train_shifted
+
+train_transformed$PTS <- log(train_shifted$PTS)
+train_transformed$AST <- train_shifted$AST^(-0.5)
+train_transformed$BLK <- train_shifted$BLK^(-2)
+train_transformed$TRB <- log(train_shifted$TRB)
+train_transformed$eFG. <- train_shifted$eFG^(4)
+train_transformed$MP <- train_shifted$MP^(0.75)
+train_transformed$STL <- train_shifted$STL^(-1)
+train_transformed$Salary <- train_shifted$Salary^(0.25)
+
+full_model2 <- lm(Salary ~ PTS + AST + BLK + TRB + eFG. + MP + STL + Pos1 +  Play, train_transformed)
+summary(full_model2)
+```
+### d) Check assumptions for using residual plots in MLR again
+#### i. Scatterplot of Response vs Fitted values
+```{r}
+y_hat <- fitted(full_model2)
+
+plot(y_hat, full_model2$Salary,
+ 	xlab = "Fitted",
+ 	ylab = "Salary",
+ 	main = "Salary vs Fitted")
+```
+#### ii. Pairwise scatterplots of predictors
+```{r}
+ggpairs(train_transformed[, c("PTS", "AST", "BLK", "TRB", "eFG.", "MP", "STL")],
+    	title = "Pairwise Scatterplots",
+    	upper = list(continuous = wrap("cor", size = 4)),
+    	lower = list(continuous = wrap("points", alpha = 0.6, size = 1.5)),
+    	progress = FALSE)
+```
+### e) Check all assumptions (linearity, uncorrelated errors, constant variance, normality) again
+#### i. Residuals vs fitted values
+```{r}
+y_value <- resid(full_model2)
+x_value <- fitted(full_model2)
+plot(x_value, y_value, xlab = "Fitted values", ylab = "Residuals", main = "Residuals vs Fitted values")
+```
+#### ii. Residuals vs each numerical predictors
+```{r}
+for (var in numeric_vars) {
+  plot(train_transformed[[var]], y_value, 
+       xlab = paste(var, "per game"), 
+       ylab = "Residuals", 
+       main = paste("Residuals vs", var)
+  )
+}
+```
+#### iii. Residuals vs each categorical predictors
+```{r}
+boxplot(y_value ~ train_transformed$Play, xlab = "All-star participation", ylab = "Residuals", main = "Residuals vs All-star participation")
+
+boxplot(y_value ~ train_transformed$Pos1, xlab = "Main playing position", ylab = "Residuals", main = "Residuals vs Main Playing Position")
+```
+#### iv. QQ plot
+```{r}
+qqnorm(y_value)
+qqline(y_value)
+```
+
+## 4. Model Selection
+### a) Forward selection
+```{r}
+library(MASS)
+
+stepAIC(
+  lm(Salary ~ 1, data = train_transformed), 
+  scope = list(upper = lm(Salary ~ ., data=train_transformed)), 
+  direction = "forward", 
+  k = 2
+)
+```
+### b) Backward selection
+```{r}
+stepAIC(
+  lm(Salary ~ ., data = train_transformed), 
+  scope = list(upper = lm(Salary ~ 1, data=train_transformed)), 
+  direction = "backward", 
+  k = 2
+)
+```
+### c) Stepwise selection
+```{r}
+stepAIC(
+  lm(Salary ~ ., data = train_transformed), 
+  direction = "both", 
+  k = 2
+)
+```
+### d) Compare the R^2, AIC, BIC, and AICc between these three models to pick the best model
+Fit the result from the forward selection
+```{r}
+forward_model <- lm(formula = Salary ~ MP + Pos1 + Play + AST + BLK + PTS + eFG., 
+    data = train_transformed)
+
+p = length(coef(forward_model)) - 1
+n = nrow(train_transformed)
+
+cbind(summary(forward_model)$adj.r.squared, 
+      extractAIC(forward_model, k=2)[2],
+      extractAIC(forward_model, k=log(n))[2],
+      extractAIC(forward_model, k=2)[2] + (2 * (p + 2) * (p + 3) / (n - p - 1)))
+```
+Fit the result from the backward/stepwise selection (produce the same result)
+```{r}
+backward_model <- lm(formula = Salary ~ PTS + AST + TRB + eFG. + MP + Pos1 + Play, 
+    data = train_transformed)
+summary(backward_model)
+
+cbind(summary(backward_model)$adj.r.squared, 
+      extractAIC(backward_model, k=2)[2],
+      extractAIC(backward_model, k=log(n))[2],
+      extractAIC(backward_model, k=2)[2] + (2 * (p + 2) * (p + 3) / (n - p - 1)))
+```
+Final model: backward selection (slightly larger adjusted R-squared but lower AIC, BIC and AICc)
+```{r}
+final_model <- lm(formula = Salary ~ PTS + AST + TRB + eFG. + MP + Pos1 + Play, 
+    data = train_transformed)
+summary(final_model)
+```
+### e) Examine VIF for the final model
+```{r}
+vif(final_model)
+```
+Remove MP based on VIF (because it has high collinearity)
+```{r}
+final_model2 <- lm(formula = Salary ~ PTS + AST + TRB + eFG. + Pos1 + Play, 
+    data = train_transformed)
+summary(final_model2)
+```
+Recheck the VIF, since some variable still has high VIF, remove another predictor
+```{r}
+vif(final_model2)
+```
+### f) Conduct partial F-test to remove least significant predictor (TRB since it's the only non-statistically significant predictor)
+```{r}
+final_model3 <- lm(formula = Salary ~ PTS + AST + eFG. + Pos1 + Play, 
+    data = train_transformed)
+summary(final_model3)
+```
+Check VIF after removing TRB
+```{r}
+vif(final_model3)
+```
+
+Check Anova after removing TRB
+```{r}
+qf(0.95, 1, 661)
+anova(final_model3, final_model2)
+```
+Since the result is not statistically significant, remove TRB from the model
+```{r}
+final_model <- final_model3
+```
+### g) Verify assumptions for using residual plots in MLR again
+#### i. Scatterplot of Response vs Fitted values
+```{r}
+y_hat <- fitted(final_model)
+
+plot(y_hat, final_model$Salary,
+ 	xlab = "Fitted",
+ 	ylab = "Salary",
+ 	main = "Salary vs Fitted")
+```
+#### ii. Pairwise scatterplots of predictors
+```{r}
+ggpairs(train_transformed[, c("PTS", "AST", "BLK", "TRB", "eFG.", "MP", "STL")],
+    	title = "Pairwise Scatterplots",
+    	upper = list(continuous = wrap("cor", size = 4)),
+    	lower = list(continuous = wrap("points", alpha = 0.6, size = 1.5)),
+    	progress = FALSE)
+```
+### h) Check all assumptions (linearity, uncorrelated errors, constant variance, normality) again
+#### i. Residuals vs fitted values
+```{r}
+y_value <- resid(final_model)
+x_value <- fitted(final_model)
+plot(x_value, y_value, xlab = "Fitted values", ylab = "Residuals", main = "Residuals vs Fitted values")
+```
+#### ii. Residuals vs each numerical predictors
+```{r}
+par(mfrow = c(3, 3))
+for (var in numeric_vars) {
+  plot(train_transformed[[var]], y_value, 
+       xlab = paste(var, "per game"), 
+       ylab = "Residuals", 
+       main = paste("Residuals vs", var)
+  )
+}
+```
+#### iii. Residuals vs each categorical predictors
+```{r}
+boxplot(y_value ~ train_transformed$Play, xlab = "All-star participation", ylab = "Residuals", main = "Residuals vs All-star participation")
+boxplot(y_value ~ train_transformed$Pos1, xlab = "Main playing position", ylab = "Residuals", main = "Residuals vs Main Playing Position")
+```
+#### iv. QQ plot
+```{r}
+qqnorm(y_value)
+qqline(y_value)
+```
+
+### i) Check Problematic Observations
+#### i. Leverage Points
+```{r}
+p = length(coef(final_model)) - 1
+n = nrow(train_transformed)
+
+hii <- hatvalues(final_model)
+cutoff_hii <- 2 * (p + 1) / n
+which(hii > cutoff_hii)
+```
+#### ii. Outlier points
+```{r}
+ri <- rstandard(final_model)
+which(ri > 2 | ri < - 2)
+```
+#### iii. Influential on all fitted values
+```{r}
+di <- cooks.distance(final_model)
+cutoff_di <- qf(0.5, p + 1, n - p - 1)
+which(di > cutoff_di)
+```
+#### iv. Influential on own fitted values
+```{r}
+dffits <- dffits(final_model)
+cutoff_dffits <- 2 * sqrt((p + 1) / (n))
+which(abs(dffits) > cutoff_dffits)
+```
+#### v. Influential on coefficients
+```{r}
+dfbetas <- dfbetas(final_model)
+cutoff_dfbetas <- 2 / sqrt(n)
+
+for(i in 1:5){
+  print(paste0("Beta ", i-1))
+  print(which(abs(dfbetas[,i]) > cutoff_dfbetas))    # this checks all betas in a loop
+}
+
+```
+
+## 5. Final Model Validation
+### a) Apply model to test dataset
+```{r}
+# Box Cox transformation requires all input data to be positive
+test_shifted <- test
+for (var in numeric_vars) {
+  min_value <- min(test[[var]], na.rm = TRUE)
+  if (min_value <= 0) {
+    test_shifted[[var]] <- test[[var]] - min_value + 1
+  }
+}
+```
+Transform test dataset exactly the same way as train dataset (applying the box-cox transformation)
+```{r}
+test_transformed <- test_shifted
+
+test_transformed$PTS <- log(test_shifted$PTS)
+test_transformed$AST <- test_shifted$AST^(-0.5)
+test_transformed$BLK <- test_shifted$BLK^(-2)
+test_transformed$TRB <- log(test_shifted$TRB)
+test_transformed$eFG. <- test_shifted$eFG^(4)
+test_transformed$MP <- test_shifted$MP^(0.75)
+test_transformed$STL <- test_shifted$STL^(-1)
+test_transformed$Salary <- test_shifted$Salary^(0.25)
+
+
+final_model_test <- lm(formula = Salary ~ PTS + AST + eFG. + Pos1 + Play, 
+    data = test_transformed)
+summary(final_model_test)
+```
+### b) Examine VIF of the test model
+```{r}
+vif(final_model_test)
+```
+### c) Compare number of significant predictors, different coefficient estimates, adj R^2, and VIF to the test model
+- Number of significant predictors: similar
+- different estimates but within 2 SE: satisfied.
+- similar R^2 adj
+- similar VIFs
+### d) Verify assumptions for using residual plots in MLR again for test model
+#### i. Scatterplot of Response vs Fitted values
+```{r}
+y_hat <- fitted(final_model_test)
+
+plot(y_hat, final_model_test$Salary,
+ 	xlab = "Fitted",
+ 	ylab = "Salary",
+ 	main = "Salary vs Fitted")
+```
+#### ii. Pairwise scatterplots of predictors
+```{r}
+ggpairs(test_transformed[, c("PTS", "AST", "BLK", "TRB", "eFG.", "MP", "STL")],
+    	title = "Pairwise Scatterplots",
+    	upper = list(continuous = wrap("cor", size = 4)),
+    	lower = list(continuous = wrap("points", alpha = 0.6, size = 1.5)),
+    	progress = FALSE)
+```
+### e) Check all assumptions (linearity, uncorrelated errors, constant variance, normality) again for test model
+#### i. Residuals vs fitted values
+```{r}
+y_value <- resid(final_model_test)
+x_value <- fitted(final_model_test)
+plot(x_value, y_value, xlab = "Fitted values", ylab = "Residuals", main = "Residuals vs Fitted values")
+```
+#### ii. Residuals vs each numerical predictors
+```{r}
+par(mfrow = c(3, 3))
+for (var in numeric_vars) {
+  plot(test_transformed[[var]], y_value, 
+       xlab = paste(var, "per game"), 
+       ylab = "Residuals", 
+       main = paste("Residuals vs", var)
+  )
+}
+```
+#### iii. Residuals vs each categorical predictors
+```{r}
+boxplot(y_value ~ test_transformed$Play, xlab = "All-star participation", ylab = "Residuals", main = "Residuals vs All-star participation")
+boxplot(y_value ~ test_transformed$Pos1, xlab = "Main playing position", ylab = "Residuals", main = "Residuals vs Main Playing Position")
+```
+#### iv. QQ plot
+```{r}
+qqnorm(y_value)
+qqline(y_value)
+```
+
+### f) Check Problematic Observations
+#### i. Leverage Points
+```{r}
+p = length(coef(final_model_test)) - 1
+n = nrow(test_transformed)
+
+hii <- hatvalues(final_model_test)
+cutoff_hii <- 2 * (p + 1) / n
+which(hii > cutoff_hii)
+```
+#### ii. Outlier points
+```{r}
+ri <- rstandard(final_model_test)
+which(ri > 2 | ri < - 2)
+```
+#### iii. Influential on all fitted values
+```{r}
+di <- cooks.distance(final_model_test)
+cutoff_di <- qf(0.5, p + 1, n - p - 1)
+which(di > cutoff_di)
+```
+#### iv. Influential on own fitted values
+```{r}
+dffits <- dffits(final_model_test)
+cutoff_dffits <- 2 * sqrt((p + 1) / (n))
+which(abs(dffits) > cutoff_dffits)
+```
+#### v. Influential on coefficients
+```{r}
+dfbetas <- dfbetas(final_model_test)
+cutoff_dfbetas <- 2 / sqrt(n)
+
+for(i in 1:5){
+  print(paste0("Beta ", i-1))
+  print(which(abs(dfbetas[,i]) > cutoff_dfbetas))    # this checks all betas in a loop
+}
+```
+
+
