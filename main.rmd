@@ -147,6 +147,7 @@ summary(full_model)
 ```
 Examine VIF for multicollinearity
 ```{r}
+install.packages("car")
 library(car)
 vif(full_model)
 ```
@@ -192,9 +193,9 @@ for (var in numeric_vars) {
 ```
 #### iii. Residuals vs each categorical predictors
 ```{r}
-boxplot(y_value ~ train$Play, xlab = "All-star participation", ylab = "Residuals", main = "Residuals vs All-star participation")
+boxplot(y_value ~ train$Play, xlab = "All-star participation (Play)", ylab = "Residuals", main = "Residuals vs All-star participation (Play)")
 
-boxplot(y_value ~ train$Pos1, xlab = "Main playing position", ylab = "Residuals", main = "Residuals vs Main Playing Position")
+boxplot(y_value ~ train$Pos1, xlab = "Main playing position (Post1)", ylab = "Residuals", main = "Residuals vs Main Playing Position (Pos1)")
 ```
 #### iv. QQ plot
 ```{r}
@@ -204,10 +205,11 @@ qqline(y_value)
 
 ### c) Apply box cox to any predictor or response variables if necessary
 ```{r}
-# Shift everything by 0.5 since we have some zero values (box-cox doesn't allow)
+# Shift everything by 1 since we have some zero values (box-cox doesn't allow)
 train_shifted <- train
 for (var in numeric_vars) {
   min_value <- min(train[[var]], na.rm = TRUE)
+  print(min_value)
   if (min_value <= 0) {
     train_shifted[[var]] <- train[[var]] - min_value + 1
   }
@@ -402,7 +404,6 @@ plot(x_value, y_value, xlab = "Fitted values", ylab = "Residuals", main = "Resid
 ```
 #### ii. Residuals vs each numerical predictors
 ```{r}
-par(mfrow = c(3, 3))
 for (var in numeric_vars) {
   plot(train_transformed[[var]], y_value, 
        xlab = paste(var, "per game"), 
@@ -430,37 +431,45 @@ n = nrow(train_transformed)
 
 hii <- hatvalues(final_model)
 cutoff_hii <- 2 * (p + 1) / n
-which(hii > cutoff_hii)
+high_leverage <- which(hii > cutoff_hii)
+print(high_leverage)
+print(length(high_leverage))
 ```
 #### ii. Outlier points
 ```{r}
 ri <- rstandard(final_model)
-which(ri > 2 | ri < - 2)
+outlier <- which(ri > 2 | ri < - 2)
+print(outlier)
+print(length(outlier))
 ```
 #### iii. Influential on all fitted values
 ```{r}
 di <- cooks.distance(final_model)
 cutoff_di <- qf(0.5, p + 1, n - p - 1)
-which(di > cutoff_di)
+influential_on_all_fitted <- which(di > cutoff_di)
+print(influential_on_all_fitted)
+print(length(influential_on_all_fitted))
 ```
 #### iv. Influential on own fitted values
 ```{r}
 dffits <- dffits(final_model)
 cutoff_dffits <- 2 * sqrt((p + 1) / (n))
-which(abs(dffits) > cutoff_dffits)
+influential_on_own_fitted <- which(abs(dffits) > cutoff_dffits)
+print(influential_on_own_fitted)
+print(length(influential_on_own_fitted))
 ```
 #### v. Influential on coefficients
 ```{r}
 dfbetas <- dfbetas(final_model)
 cutoff_dfbetas <- 2 / sqrt(n)
 
-for(i in 1:5){
+for(i in 1:9){
   print(paste0("Beta ", i-1))
-  print(which(abs(dfbetas[,i]) > cutoff_dfbetas))    # this checks all betas in a loop
+  influential_on_coefficient <- which(abs(dfbetas[,i]) > cutoff_dfbetas)
+  print(influential_on_coefficient)
+  print(length(influential_on_coefficient))
 }
-
 ```
-
 ## 5. Final Model Validation
 ### a) Apply model to test dataset
 ```{r}
@@ -527,7 +536,6 @@ plot(x_value, y_value, xlab = "Fitted values", ylab = "Residuals", main = "Resid
 ```
 #### ii. Residuals vs each numerical predictors
 ```{r}
-par(mfrow = c(3, 3))
 for (var in numeric_vars) {
   plot(test_transformed[[var]], y_value, 
        xlab = paste(var, "per game"), 
@@ -555,33 +563,43 @@ n = nrow(test_transformed)
 
 hii <- hatvalues(final_model_test)
 cutoff_hii <- 2 * (p + 1) / n
-which(hii > cutoff_hii)
+high_leverage <- which(hii > cutoff_hii)
+print(high_leverage)
+print(length(high_leverage))
 ```
 #### ii. Outlier points
 ```{r}
 ri <- rstandard(final_model_test)
-which(ri > 2 | ri < - 2)
+outlier <- which(ri > 2 | ri < - 2)
+print(outlier)
+print(length(outlier))
 ```
 #### iii. Influential on all fitted values
 ```{r}
 di <- cooks.distance(final_model_test)
 cutoff_di <- qf(0.5, p + 1, n - p - 1)
-which(di > cutoff_di)
+influential_on_all_fitted <- which(di > cutoff_di)
+print(influential_on_all_fitted)
+print(length(influential_on_all_fitted))
 ```
 #### iv. Influential on own fitted values
 ```{r}
 dffits <- dffits(final_model_test)
 cutoff_dffits <- 2 * sqrt((p + 1) / (n))
-which(abs(dffits) > cutoff_dffits)
+influential_on_own_fitted <- which(abs(dffits) > cutoff_dffits)
+print(influential_on_own_fitted)
+print(length(influential_on_own_fitted))
 ```
 #### v. Influential on coefficients
 ```{r}
 dfbetas <- dfbetas(final_model_test)
 cutoff_dfbetas <- 2 / sqrt(n)
 
-for(i in 1:5){
+for(i in 1:9) {
   print(paste0("Beta ", i-1))
-  print(which(abs(dfbetas[,i]) > cutoff_dfbetas))    # this checks all betas in a loop
+  influential_on_coefficient <- which(abs(dfbetas[,i]) > cutoff_dfbetas)
+  print(influential_on_coefficient)    # this checks all betas in a loop
+  print(length(influential_on_coefficient))
 }
 ```
 
